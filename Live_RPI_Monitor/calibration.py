@@ -11,7 +11,6 @@ import CDTools
 # detector mask
 # probe energy
 # probe basis
-#
 
 
 def make_calibration_from_ptycho(dataset, results):

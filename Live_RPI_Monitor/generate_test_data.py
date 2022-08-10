@@ -5,7 +5,7 @@ onto a ZMQ socket at a specified delay
 import zmq
 import time
 import numpy as np
-import CDTools
+import cdtools
 from scipy.io import loadmat, savemat
 import torch as t
 
@@ -16,10 +16,10 @@ pub.bind("tcp://*:5555")
 
 
 calibration = loadmat('calibration.mat')
-model = CDTools.models.RPI.from_calibration(calibration, [256,256])
+model = cdtools.models.RPI.from_calibration(calibration, [256,256])
 
 dataset = '/home/abe/Old Dropbox (MIT)/Old Projects/RPI_Code_Optics_Express/data/Optical_Data_ptycho.cxi'
-dataset = CDTools.datasets.Ptycho2DDataset.from_cxi(dataset)
+dataset = cdtools.datasets.Ptycho2DDataset.from_cxi(dataset)
 
 i = 0
 while True:

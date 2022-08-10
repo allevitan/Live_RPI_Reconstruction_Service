@@ -179,7 +179,86 @@ def run_CG(n_iters, obj, probe, pat, mask=None, clear_every=10):
     return temp_obj.data
 
 
+def run_DM(n_iters, obj, probe, pat, mask=None, beta=1):
+    """Runs a difference map based RPI algorithm
 
+    This algorithm is tuned for speed, the main consequence of that being
+    that it only accepts a single probe mode. Additionally, it doesn't allow
+    for a background model (so, subtract a background before using)
+
+    The algorithm is a straight implementation of the difference map
+    algorithm, with the two projection operators being the measured
+    Fourier magnitudes and a support constraint applied to the object
+    in Fourier space. The object is returned in low resolution (after
+    application of the Fourier space constraint).
+
+    Note that this expects to run in a batch form, with a stack of objects and
+    a stack of patterns. All the tensors should be on the same device and
+    have compatible dtypes.
+
+    Parameters
+    ----------
+    n_iters : int
+        The number of iterations to run
+    obj : torch.Tensor
+        An NxM'xL' initial guess of the object function
+    probe : torch.Tensor
+        An MxL probe function
+    pat : torch.Tensor
+        An NxMxL stack of patterns to reconstruct
+    mask : torch.Tensor
+        Optional, a boolean mask set to "True" for detecto pixels to be included
+    beta : float
+        Default is 1, and doesn't currently allow beta other than 1
+    
+    Returns
+    -------
+    obj : torch.Tensor
+        An NxM'xL' tensor of the reconstructed objects
+    """
+
+    padding_left = (np.array(obj.shape[-2:])+1)//2
+    padding_right = np.array(obj.shape[-2:]) - np.array(obj.shape[-2:])//2
+
+    # FFTshifting the pattern once actually saves a lot of time compared
+    # to fftshifting the wavefields at each iteration.
+    pat = t.fft.ifftshift(pat, dim=(-1,-2))
+    sqrt_pat = t.sqrt(pat)
+    
+    inverse_probe = t.conj(probe) / (t.abs(probe)**2 + 0.00001 * t.max(t.abs(probe))**2)
+    def project_Fourier_support(guess_obj):
+        # Note: This will fail for 1-pixel objects, when padding-right
+        # goes to 0. I think we'll live
+        guess_obj_Fourier = t.fft.fft2(guess_obj, norm='ortho')
+        guess_obj_Fourier[...,padding_left[0]:-padding_right[0],:] = 0
+        guess_obj_Fourier[...,:,padding_left[1]:-padding_right[1]] = 0
+        proj_obj = t.fft.ifft2(guess_obj_Fourier, norm='ortho')
+        return proj_obj
+
+    def project_magnitudes(guess_obj):
+        ew = guess_obj * probe
+        far_field = t.fft.fft2(ew, norm='ortho')
+        far_field = t.exp(1j*t.angle(far_field)) * sqrt_pat
+        ew = t.fft.ifft2(far_field, norm='ortho')
+        return inverse_probe * ew
+        
+    # we need a temporary version of the obj in full resolution to
+    # iterate over
+    temp_obj = RPI_interaction(t.ones_like(probe),obj)    
+
+    for i in range(n_iters):
+        temp_obj = project_magnitudes(project_Fourier_support(temp_obj))
+        term_2 = project_Fourier_support(temp_obj)
+        term_1 = project_magnitudes(2*term_2 - temp_obj)
+        temp_obj += term_1 - term_2
+
+    guess_obj_Fourier = t.fft.fft2(temp_obj, norm='ortho')
+    rolled = t.roll(guess_obj_Fourier, tuple(padding_right), dims=(-2,-1))
+    low_res_Fourier = rolled[...,:obj.shape[-2],:obj.shape[-1]]
+    unrolled = t.roll(low_res_Fourier, tuple(-padding_right), dims=(-2,-1))
+    return t.fft.ifft2(unrolled, norm='ortho')
+
+    
 if __name__ == '__main__':
 
     # Here we simulate some data using the probe defined in the calibration
@@ -197,7 +276,7 @@ if __name__ == '__main__':
     
     eps = 0.1
     
-    n_objs = 10
+    n_objs = 100
     shape = [256,256]
     obj_slice = np.s_[...,500-shape[0]//2:500+shape[0]//2,
                       500-shape[0]//2:500+shape[0]//2]
@@ -218,7 +297,7 @@ if __name__ == '__main__':
     probe = probe.to(device=dev)
     true_pats = true_pats.to(device=dev)
     
-    n_iters = 100
+    n_iters = 10
 
     # Test it with a mask
     # mask = t.ones_like(probe, dtype=t.bool)
@@ -230,6 +309,8 @@ if __name__ == '__main__':
     start_time = time.time()    
     rec_objs = run_CG(n_iters, uniform, probe, true_pats,
                       mask=mask, clear_every=10)
+    #rec_objs = run_DM(n_iters, uniform, probe, true_pats,
+    #                  mask=mask)
     t.cuda.synchronize()
     print(n_iters, 'iterations run on', n_objs, 'objects in',
           (time.time() - start_time), 'seconds')
