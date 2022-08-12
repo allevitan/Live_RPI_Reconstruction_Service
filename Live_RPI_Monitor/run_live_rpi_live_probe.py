@@ -40,24 +40,22 @@ verbose = True
 message = None
 while True:
     
-    #  Implementing the logic for the two ways of reading from the socket
+    something_new=False
     calib_message=None
     while True:
         try:
             calib_message = calib_sub.recv_pyobj(flags=zmq.NOBLOCK)
-            continue
+            something_new = True
         except zmq.ZMQError:
             break
 
     while True:
         try:
             message = sub.recv_pyobj(flags=zmq.NOBLOCK)
-            continue
+            something_new = True
         except zmq.ZMQError:
             break
 
-    #message = sub.recv_pyobj()
-    
     # Keep waiting until we get our first calibration
     if not have_calibration and calib_message is None:
         print('Waiting for first calibration', end='\r')
@@ -77,6 +75,10 @@ while True:
         have_calibration=True
 
     if message is None:
+        time.sleep(0.001)
+        continue
+
+    if not something_new:
         time.sleep(0.001)
         continue
     
