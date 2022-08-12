@@ -126,6 +126,8 @@ class Window(QMainWindow, Ui_MainWindow):
                     
         self.pushButton_on.clicked.connect(switchOn)
         self.pushButton_off.clicked.connect(switchOff)
+            
+        self.pushButton_clearBuffer.clicked.connect(self.clearBufferEvent.set)
 
     def countGPUs(self):
         in_use = self.listWidget_gpusInUse.count()
@@ -186,8 +188,9 @@ class Window(QMainWindow, Ui_MainWindow):
             else:
                 self.lineEdit_bufferSize.setStyleSheet('color: red;')
 
-            calculationTime = self.readoutInfo['calculationTime']
-            self.lineEdit_processingTime.setText(str(calculationTime))
+            calculationTime = self.readoutInfo['processingTime']
+            self.lineEdit_processingTime.setText(
+                '%0.2f ms' % (calculationTime*1000))
         
 def main(argv=sys.argv):
 

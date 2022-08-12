@@ -20,11 +20,39 @@ def run_RPI_service(stopEvent, clearBufferEvent, updateEvent,
     # Define the socket to publish results on
     pub = context.socket(zmq.PUB)
     pub.bind(controlInfo['resultsPort'])
+
+
+    pattern_buffer = []
+    readoutInfo['processingTime'] = 0.0
+    # The number of frames to run a trailing average of processing time on
+    nFrames = 3.0
+    dt = 0
     
-    while readoutInfo['bufferSize'] < 20 and not stopEvent.is_set():
-        time.sleep(0.1)
-        #print(controlInfo['nIterations'])
-        readoutInfo['bufferSize']+= 1
+    while not stopEvent.is_set():
+        
+        if clearBufferEvent.is_set():
+            pattern_buffer = []
+            clearBufferEvent.clear()
+            
+        while True:
+            try:
+                pattern_buffer.append(sub.recv_pyobj(flags=zmq.NOBLOCK))
+            except zmq.ZMQError:
+                break
+
+        if not len(pattern_buffer):
+            time.sleep(0.001)
+            continue
+
+        readoutInfo['processingTime'] = \
+            ((readoutInfo['processingTime'] * (nFrames-1) + dt) / nFrames)
+        readoutInfo['bufferSize'] = len(pattern_buffer)
         updateEvent.set()
 
+        start_time = time.time()
+
+        time.sleep(0.1)
+        pattern_buffer.pop()
+
+        dt = time.time() - start_time
 
