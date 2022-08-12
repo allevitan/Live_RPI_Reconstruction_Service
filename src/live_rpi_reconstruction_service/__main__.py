@@ -6,6 +6,7 @@ from PyQt5.QtGui import *
 from PyQt5.QtWidgets import *
 #import qdarkstyle
 
+import multiprocessing
 from multiprocessing import Process, Manager
 
 import torch as t
@@ -38,6 +39,7 @@ class Window(QMainWindow, Ui_MainWindow):
     def setupSharedObjects(self):
         self.stopEvent = self.sharedDataManager.Event()
         self.clearBufferEvent = self.sharedDataManager.Event()
+        self.calibrationAcquiredEvent = self.sharedDataManager.Event()
         self.updateEvent = self.sharedDataManager.Event()
         self.controlInfo = self.sharedDataManager.dict()
         self.readoutInfo = self.sharedDataManager.dict()
@@ -45,6 +47,7 @@ class Window(QMainWindow, Ui_MainWindow):
     def connectSignalsSlots(self):
         self.setupOnOff()
         self.setupGPUs()
+        self.setupReconstructionParameters()
 
     def setupOnOff(self):
 
@@ -61,6 +64,8 @@ class Window(QMainWindow, Ui_MainWindow):
             
             self.groupBox_zmqSetup.setDisabled(False)
             self.groupBox_gpuPool.setDisabled(False)
+
+            self.removeCalibration()
 
         def switchOn():
             if not self.pushButton_on.isChecked():
@@ -82,6 +87,9 @@ class Window(QMainWindow, Ui_MainWindow):
 
             self.groupBox_zmqSetup.setDisabled(True)
             self.groupBox_gpuPool.setDisabled(True)
+
+            self.label_calibrationState.setStyleSheet('color: red;')
+            self.label_calibrationState.setText('Waiting for Calibration...')
             
             self.controlInfo['nIterations'] = self.spinBox_nIterations.value()
             self.controlInfo['pixelCount'] = self.spinBox_pixelCount.value()
@@ -118,9 +126,11 @@ class Window(QMainWindow, Ui_MainWindow):
                 args=(self.stopEvent,
                       self.clearBufferEvent,
                       self.updateEvent,
+                      self.calibrationAcquiredEvent,
                       self.controlInfo,
                       self.readoutInfo))
             self.setupReadouts()
+            #self.rpiService.start()
             self.rpiService.start()
 
                     
@@ -129,6 +139,60 @@ class Window(QMainWindow, Ui_MainWindow):
             
         self.pushButton_clearBuffer.clicked.connect(self.clearBufferEvent.set)
 
+
+    def acquireCalibration(self):
+        self.label_calibrationState.setStyleSheet('color: green;')
+        self.label_calibrationState.setText('Calibration Acquired!')
+        
+        self.label_pixelSize.setDisabled(False)
+        self.lineEdit_pixelSize.setDisabled(False)
+
+        pixelSize = self.readoutInfo['FOV'] / self.spinBox_pixelCount.value()
+        self.lineEdit_pixelSize.setText('%0.2f nm' % (pixelSize * 1e9))
+
+        self.label_nModes.setDisabled(False)
+        self.lineEdit_nModes.setDisabled(False)
+
+        self.lineEdit_nModes.setText('%d' % self.readoutInfo['nModes'])
+
+        if self.readoutInfo['hasMask']:
+            self.checkBox_mask.setDisabled(False)
+        else:
+            self.checkBox_mask.setDisabled(True)
+        if self.readoutInfo['hasBackground']:
+            self.checkBox_background.setDisabled(False)
+        else:
+            self.checkBox_background.setDisabled(True)
+
+    def setupReconstructionParameters(self):
+        self.removeCalibration()
+
+        def updateNIterations(nIterations):
+            self.controlInfo['nIterations'] = nIterations
+        
+        self.spinBox_nIterations.valueChanged.connect(updateNIterations)
+
+        def updatePixelCount(pixelCount):
+            self.controlInfo['pixelCount'] = pixelCount
+            if 'FOV' in self.readoutInfo:
+                pixelSize = (self.readoutInfo['FOV']
+                             / self.spinBox_pixelCount.value())
+                self.lineEdit_pixelSize.setText('%0.2f nm' % (pixelSize * 1e9))
+
+        self.spinBox_pixelCount.valueChanged.connect(updatePixelCount)
+        
+        
+    def removeCalibration(self):
+        self.label_calibrationState.setStyleSheet('')
+        self.label_calibrationState.setText('Calibration Dependent Info:')
+        self.label_pixelSize.setDisabled(True)
+        self.lineEdit_pixelSize.setDisabled(True)
+        self.label_nModes.setDisabled(True)
+        self.lineEdit_nModes.setDisabled(True)
+        if 'FOV' in self.readoutInfo:
+            self.readoutInfo.pop('FOV')
+
+    
     def countGPUs(self):
         in_use = self.listWidget_gpusInUse.count()
         total = in_use + self.listWidget_gpusAvailable.count()
@@ -136,7 +200,7 @@ class Window(QMainWindow, Ui_MainWindow):
                                        (in_use, total))
         
     def setupGPUs(self):
-        GPUs = [('cuda:%d; ' % i) + t.cuda.get_device_name(i) for i in range(t.cuda.device_count())]*5
+        GPUs = [('cuda:%d; ' % i) + t.cuda.get_device_name(i) for i in range(t.cuda.device_count())]
 
         self.listWidget_gpusAvailable.addItems(GPUs)
 
@@ -166,7 +230,6 @@ class Window(QMainWindow, Ui_MainWindow):
             self.countGPUs)
     
     def setupReadouts(self):
-        self.idx = 0
         self.timer = QTimer()
         self.timer.timeout.connect(self.readLatest)
         self.timer.start(50)
@@ -176,7 +239,7 @@ class Window(QMainWindow, Ui_MainWindow):
             self.rpiService.join()
             self.pushButton_off.click()
 
-        elif self.updateEvent.is_set():
+        if self.updateEvent.is_set():
             self.updateEvent.clear()
             
             bufferSize = self.readoutInfo['bufferSize']
@@ -191,8 +254,16 @@ class Window(QMainWindow, Ui_MainWindow):
             calculationTime = self.readoutInfo['processingTime']
             self.lineEdit_processingTime.setText(
                 '%0.2f ms' % (calculationTime*1000))
+
+        if self.calibrationAcquiredEvent.is_set():
+            self.calibrationAcquiredEvent.clear()
+            self.acquireCalibration()
         
 def main(argv=sys.argv):
+
+    # This is needed to allow CUDA to be initialized in both the main thread
+    # and the subprocesses
+    multiprocessing.set_start_method('spawn')
 
     # I don't really know why, but without this the window doesn't close
     # when errors are thrown.
