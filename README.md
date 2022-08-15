@@ -1,11 +1,8 @@
-Live RPI Monitor
-----------------
+Live RPI Reconstruction Service
+-------------------------------
 
-The goal of this project is to make a script that can run in the background, continuously reading from a ZeroMQ stream of data and emitting it's own ZMQ stream of reconstructed results.
+This project is a reconstruction engine for RPI data which runs on ZMQ and has an attached GUI. The reconstruction is done via a conjugate-gradient based method with a stepsize that is intelligently chosen with an analytic formula that approximates the optimal step to maximally reduce the mean squared amplitude error.
 
-To make that happen, there are a few things I need to handle:
+This special reconstruction method is tuned for performance at the expense of some quality and flexibility, as is appropriate for a tool designed to provide live reconstructions to enable online analysis of data.
 
-* I need to speed up the RPI reconstructions
-* I probably will have to build ways for the reconstruction to process multiple files at once, because I suspect each reconstruction won't be able to fully tax even one small GPU
-* I need to define a standard format for the calibration data that can easily be fed to the tool so it knows how to proceed.
-
+The reconstruction service itself reads in data and probe calibrations on two separate ZMQ streams, does the reconstructions on a selectable pool of GPUs, and then emits reconstructed results on a third ZMQ stream. The simple attached Qt5 GUI allows a user to monitor some basic metrics for the service, start and stop the service, and change the reconstruction parameters.

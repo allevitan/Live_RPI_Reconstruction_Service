@@ -12,12 +12,19 @@ from multiprocessing import Process, Manager
 import torch as t
 import zmq
 
-from live_rpi_reconstruction_service_ui import Ui_MainWindow
-from service import run_RPI_service
+from live_rpi_reconstruction_service.live_rpi_reconstruction_service_ui \
+    import Ui_MainWindow
+from live_rpi_reconstruction_service.service import run_RPI_service
 
 """
 Below we define the functionality of the main window
 """
+
+# TODO: Right now if the number of iterations drops, it can output a later
+# result before an earlier one because the later one took less time. So I
+# should make an output buffer than ensures the ordering is correct.
+
+# TODO: Make it actually use more than one probe mode for the reconstruction!
 
 class Window(QMainWindow, Ui_MainWindow):
     def __init__(self, sharedDataManager, parent=None,
@@ -93,9 +100,11 @@ class Window(QMainWindow, Ui_MainWindow):
             
             self.controlInfo['nIterations'] = self.spinBox_nIterations.value()
             self.controlInfo['pixelCount'] = self.spinBox_pixelCount.value()
-            self.controlInfo['mask'] = self.checkBox_mask.checkState()
+            # The checkState() output is some special pyqt object which can't
+            # be pickled, so it can't be sent over the multiprocessing manager
+            self.controlInfo['mask'] = bool(self.checkBox_mask.checkState())
             self.controlInfo['background'] = \
-                self.checkBox_background.checkState()
+                bool(self.checkBox_background.checkState())
             
 
             self.controlInfo['patternsPort'] = \
@@ -264,7 +273,7 @@ def main(argv=sys.argv):
     # This is needed to allow CUDA to be initialized in both the main thread
     # and the subprocesses
     multiprocessing.set_start_method('spawn')
-
+    
     # I don't really know why, but without this the window doesn't close
     # when errors are thrown.
     sys._excepthook = sys.excepthook

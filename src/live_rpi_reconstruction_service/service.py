@@ -3,7 +3,7 @@ import time
 import zmq
 import numpy as np
 import torch as t
-from conjugate_gradient_rpi import iterate_CG
+from live_rpi_reconstruction_service.conjugate_gradient_rpi import iterate_CG
 
 """
 This service is designed to be called as the target of a multiprocessing
