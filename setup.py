@@ -15,6 +15,7 @@ setuptools.setup(
     url="https://github.com/allevitan/Live_RPI_Reconstruction_Service",
     install_requires=[
         "numpy>=1.0",
+        "scipy",
         "PyQt5",
         "pyzmq",
         "torch>=1.9.0", #1.9.0 supports autograd on indexed complex tensors

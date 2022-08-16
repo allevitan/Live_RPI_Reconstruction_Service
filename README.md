@@ -9,7 +9,7 @@ The reconstruction service itself reads in data and probe calibrations on two se
 
 ## Installation
 
-Once the various dependencies (listed in setup.py) are installed, PCW can be installed via:
+Once pytorch is installed, PCW and the remaining dependencies can be installed via:
 
 ```console
 $ pip install -e .

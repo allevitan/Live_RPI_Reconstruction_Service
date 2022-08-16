@@ -209,7 +209,7 @@ class Window(QMainWindow, Ui_MainWindow):
                                        (in_use, total))
         
     def setupGPUs(self):
-        GPUs = [('cuda:%d; ' % i) + t.cuda.get_device_name(i) for i in range(t.cuda.device_count())]
+        GPUs = [('cuda:%d; ' % i) + t.cuda.get_device_name(i) for i in range(t.cuda.device_count())]*5
 
         self.listWidget_gpusAvailable.addItems(GPUs)
 
