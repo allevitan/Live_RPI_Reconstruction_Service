@@ -1,7 +1,7 @@
 Live RPI Reconstruction Service
 -------------------------------
 
-This project is a reconstruction engine for RPI data which runs on ZMQ and has an attached GUI. The reconstruction is done via a conjugate-gradient based method with a stepsize that is intelligently chosen with an analytic formula that approximates the optimal step to maximally reduce the mean squared amplitude error.
+This project is a reconstruction engine for RPI data which runs on ZMQ and has an attached GUI. The reconstruction is done via a conjugate-gradient based method. The stepsize is chosen using a simple formula to approximate the optimal step size, which makes the algorithm tuning-parameter-free with only a minor penalty to performance.
 
 This special reconstruction method is tuned for performance at the expense of some quality and flexibility, as is appropriate for a tool designed to provide live reconstructions to enable online analysis of data.
 
