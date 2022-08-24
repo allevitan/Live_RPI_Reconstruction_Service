@@ -49,6 +49,21 @@ def RPI_interaction(probe, obj):
     return probe * upsampled_obj
 
 
+def downsample_to_shape(wavefield, shape):
+    # The far-field propagator is just a 2D FFT but with an fftshift
+    fftobj = t.fft.fftshift(t.fft.fft2(wavefield, norm='ortho'), dim=(-1,-2))
+    pad2l =  wavefield.shape[-2]//2 - shape[-2]//2
+    pad2r = wavefield.shape[-2] - shape[-2] - pad2l
+    pad1l = wavefield.shape[-1]//2 - shape[-1]//2
+    pad1r = wavefield.shape[-1] - shape[-1] - pad1l
+
+    fftobj = fftobj[..., pad2l:-pad2r,pad1l:-pad1r]
+
+    downsampled_obj = t.fft.ifft2(t.fft.ifftshift(fftobj, dim=(-1,-2)),
+                                  norm='ortho')
+    return downsampled_obj
+
+    
 def forward(obj, probe):
     """Simulates the wavefield at the detector plane from the probe and obj
 

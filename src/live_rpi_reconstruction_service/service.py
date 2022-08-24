@@ -3,7 +3,7 @@ import time
 import zmq
 import numpy as np
 import torch as t
-from live_rpi_reconstruction_service.conjugate_gradient_rpi import iterate_CG
+from live_rpi_reconstruction_service.conjugate_gradient_rpi import iterate_CG, downsample_to_shape
 
 """
 This service is designed to be called as the target of a multiprocessing
@@ -16,6 +16,10 @@ means that if the selected GPUs have differing speeds, it will always be
 limited by the slowest GPU.
 
 """
+
+# TODO: right now it doesn't guarante that the events get emitted in the order
+# they were received, start events for example will get through faster than
+# reconstructions
 
 def run_RPI_service(stopEvent, clearBufferEvent,
                     updateEvent, calibrationAcquiredEvent,
@@ -61,7 +65,7 @@ def run_RPI_service(stopEvent, clearBufferEvent,
             
         while True:
             try:
-                pattern_buffer.append(sub.recv_pyobj(flags=zmq.NOBLOCK))
+                pattern_buffer.insert(0, sub.recv_pyobj(flags=zmq.NOBLOCK))
             except zmq.ZMQError:
                 break
 
@@ -98,7 +102,7 @@ def run_RPI_service(stopEvent, clearBufferEvent,
                                            device=gpu)  for gpu in GPUs]
             else:
                 backgrounds = [None for gpu in GPUs]
-
+                
             calibrationAcquiredEvent.set()
             new_calibration = False
 
@@ -134,6 +138,14 @@ def run_RPI_service(stopEvent, clearBufferEvent,
                 # If the input is just a raw pattern, though, that's fine
                 else: 
                     sqrtPattern = t.as_tensor(event, device=GPUs[i])
+
+                event['basis'] = calibration['basis'] \
+                    * (sqrtPattern.shape[-1]/shape[-1])
+                
+                lr_probe = downsample_to_shape(t.abs(probes[i].cpu())**2,
+                                               shape[1:])
+                event['weights'] = t.sum(t.abs(lr_probe), dim=0).numpy()
+                event['weights'] /= np.mean(event['weights'])
                 
                 if controlInfo['background'] and 'background' in calibration:
                     sqrtPattern =t.clamp(sqrtPattern - backgrounds[i], min=0)
