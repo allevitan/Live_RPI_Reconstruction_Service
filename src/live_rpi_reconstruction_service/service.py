@@ -118,8 +118,23 @@ def run_RPI_service(stopEvent, clearBufferEvent,
             if rec is None and len(pattern_buffer) != 0:
                 shape = [1]+[controlInfo['pixelCount']]*2
 
-                sqrtPattern = t.as_tensor(pattern_buffer.pop(),
-                                          device=GPUs[i])
+                event = pattern_buffer.pop()
+                # If the event that arrived is a dictionary, that means we're
+                # reading from a stream of events with metadata, etc.
+                if type(event) == dict:
+                    # If there's no data, we just pass along the event so
+                    # anything listening to our output knows about scan
+                    # start/stop events, etc.
+                    if 'data' not in event:
+                        pub.send_pyobj(event)
+                        continue
+                    # If there is data, we extract it for processing
+                    else:
+                        sqrtPattern = t.as_tensor(event['data'], device=GPUs[i])
+                # If the input is just a raw pattern, though, that's fine
+                else: 
+                    sqrtPattern = t.as_tensor(event, device=GPUs[i])
+                
                 if controlInfo['background'] and 'background' in calibration:
                     sqrtPattern =t.clamp(sqrtPattern - backgrounds[i], min=0)
                 sqrtPattern = t.sqrt(sqrtPattern)
@@ -136,7 +151,8 @@ def run_RPI_service(stopEvent, clearBufferEvent,
                 background = (backgrounds[i] if controlInfo['background']
                               else None)
                         
-                recs[i]= {'probe': probes[i],
+                recs[i]= {'event': event,
+                          'probe': probes[i],
                           'sqrtPattern': sqrtPattern,
                           'obj': obj,
                           'mask': mask,
@@ -155,7 +171,14 @@ def run_RPI_service(stopEvent, clearBufferEvent,
         # are done
         for i, rec in enumerate(recs):
             if rec is not None and rec['iter'] >= rec['nIterations']:
-                pub.send_pyobj(rec['obj'].detach().cpu().numpy()[0])
+
+                if type(rec['event']) == dict:
+                    event = rec['event']
+                    event['data'] = rec['obj'].detach().cpu().numpy()[0]
+                else:
+                    event = rec['obj'].detach().cpu().numpy()[0]
+                
+                pub.send_pyobj(event)
                 dt = (time.time() - rec['startTime'])/len(GPUs)
 
                 # Only true on the first frame:
