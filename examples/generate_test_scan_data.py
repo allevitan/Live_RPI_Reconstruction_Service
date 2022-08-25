@@ -31,7 +31,7 @@ while True:
                      'position': position}
             pub.send_pyobj(event)
             i += 1
-            time.sleep(1)
+            time.sleep(0.1)
         print('Ending a scan')
         pub.send_pyobj({'event':'stop',
                         'abort': False})

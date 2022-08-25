@@ -17,10 +17,6 @@ limited by the slowest GPU.
 
 """
 
-# TODO: right now it doesn't guarante that the events get emitted in the order
-# they were received, start events for example will get through faster than
-# reconstructions
-
 def run_RPI_service(stopEvent, clearBufferEvent,
                     updateEvent, calibrationAcquiredEvent,
                     controlInfo, readoutInfo):
@@ -43,6 +39,12 @@ def run_RPI_service(stopEvent, clearBufferEvent,
 
 
     pattern_buffer = []
+    # The output buffer is needed because some events take longer to respond
+    # to than others, so we need to buffer the output to ensure we emit
+    # events in the same order we received them.
+    output_buffer = []
+    event_count = 0
+    
     readoutInfo['processingTime'] = 0.0
     # The number of frames to run a trailing average of processing time on
     nFrames = 5.0
@@ -130,7 +132,8 @@ def run_RPI_service(stopEvent, clearBufferEvent,
                     # anything listening to our output knows about scan
                     # start/stop events, etc.
                     if 'data' not in event:
-                        pub.send_pyobj(event)
+                        output_buffer.append((event_count, event))
+                        event_count += 1
                         continue
                     # If there is data, we extract it for processing
                     else:
@@ -163,7 +166,8 @@ def run_RPI_service(stopEvent, clearBufferEvent,
                 background = (backgrounds[i] if controlInfo['background']
                               else None)
                         
-                recs[i]= {'event': event,
+                recs[i]= {'event_id': event_count,
+                          'event': event,
                           'probe': probes[i],
                           'sqrtPattern': sqrtPattern,
                           'obj': obj,
@@ -173,6 +177,8 @@ def run_RPI_service(stopEvent, clearBufferEvent,
                           'nIterations': controlInfo['nIterations'],
                           'clearEvery': 10,
                           'startTime': time.time()}
+                event_count += 1
+                
             elif rec is None:
                 continue
             else:
@@ -189,8 +195,8 @@ def run_RPI_service(stopEvent, clearBufferEvent,
                     event['data'] = rec['obj'].detach().cpu().numpy()[0]
                 else:
                     event = rec['obj'].detach().cpu().numpy()[0]
-                
-                pub.send_pyobj(event)
+
+                output_buffer.append((rec['event_id'], event))
                 dt = (time.time() - rec['startTime'])/len(GPUs)
 
                 # Only true on the first frame:
@@ -207,7 +213,21 @@ def run_RPI_service(stopEvent, clearBufferEvent,
                 readoutInfo['bufferSize'] = len(pattern_buffer)
                 updateEvent.set()
 
+        # And finally, we check the output buffer to see if any results are
+        # ready to send off
+        output_buffer = sorted(output_buffer)
 
+        remaining_event_ids = [r['event_id'] for r in recs if r is not None]
 
-        
+        if remaining_event_ids == []:
+            while len(output_buffer):
+                pub.send_pyobj(output_buffer[0][1])
+                output_buffer.pop(0)
+        else:
+            
+            min_remaining_event_id = min(remaining_event_ids)
+            while len(output_buffer) \
+                  and output_buffer[0][0] < min_remaining_event_id:
+                pub.send_pyobj(output_buffer[0][1])
+                output_buffer.pop(0)
         
