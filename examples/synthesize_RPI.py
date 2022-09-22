@@ -15,6 +15,7 @@ def add_frame_to_object(obj, weights, basis, offset,
 
     t_basis = t.as_tensor(basis)
     t_pos = t.zeros([3], dtype=t_basis.dtype)
+
     t_pos[:2] = t.as_tensor(position-offset)
     pix_position = interactions.translations_to_pixel(t_basis, t_pos).numpy()
 
@@ -66,7 +67,7 @@ if __name__ == '__main__':
     from matplotlib import pyplot as plt
     context = zmq.Context()
     sub = context.socket(zmq.SUB)
-    sub.connect("tcp://localhost:5556")
+    sub.connect("tcp://localhost:37014")
     sub.setsockopt(zmq.SUBSCRIBE, b'')
 
     plt.ion()
@@ -74,6 +75,7 @@ if __name__ == '__main__':
     started = False
     while True:
         message = sub.recv_pyobj()
+        print(message['event'])
         if message['event'] == 'start':
             started = True
             print('Starting new synthesis')
@@ -108,6 +110,7 @@ if __name__ == '__main__':
             plt.pause(0.01)
 
         else:
+            print(message['event'])
             print('Rejected an event')
 
         
