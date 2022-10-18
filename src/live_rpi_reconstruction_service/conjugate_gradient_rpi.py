@@ -108,6 +108,9 @@ def iterate_CG(rec):
     # This chunk runs the simulation and gets the gradients
     diff = forward(rec['obj'], rec['probe'])
     mag_diff = t.sqrt(t.sum(t.abs(diff)**2, dim=-3))
+    if 'oversampling' in rec and rec['oversampling'] != 1:
+        mag_diff = t.nn.functional.avg_pool2d(mag_diff.unsqueeze(0),
+                                              rec['oversampling'])[0]
     
     error_pattern = mag_diff - rec['sqrtPattern']
     if 'mask' in rec and rec['mask'] is not None:
@@ -142,8 +145,13 @@ def iterate_CG(rec):
     grad_pat = forward(step_dir, rec['probe'])
     
     A = error_pattern.detach()
-    B = (t.sum(t.real(diff.detach().conj()  * grad_pat),dim=-3)
-         / (mag_diff.detach()))
+
+    B_numerator = t.sum(t.real(diff.detach().conj()  * grad_pat),dim=-3)
+    if 'oversampling' in rec and rec['oversampling'] != 1:
+        B_numerator = t.nn.functional.avg_pool2d(B_numerator.unsqueeze(0),
+                                                 rec['oversampling'])[0]
+    
+    B = B_numerator / (mag_diff.detach())
     if 'mask' in rec and rec['mask'] is not None:
         B = B * rec['mask'].unsqueeze(0)
     

@@ -165,10 +165,17 @@ def run_RPI_service(stopEvent, clearBufferEvent,
                         else None)
                 background = (backgrounds[i] if controlInfo['background']
                               else None)
+
+                # TODO: readout the oversampling in the calibration info window
+                if 'oversampling' in calibration:
+                    oversampling = calibration['oversampling']
+                else:
+                    oversampling=1
                         
                 recs[i]= {'event_id': event_count,
                           'event': event,
                           'probe': probes[i],
+                          'oversampling': oversampling,
                           'sqrtPattern': sqrtPattern,
                           'obj': obj,
                           'mask': mask,
