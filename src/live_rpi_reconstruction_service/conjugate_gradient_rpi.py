@@ -87,6 +87,7 @@ def forward(obj, probe):
     diff = t.fft.fft2(ew, norm='ortho')
     return diff
 
+
 #@t.jit.script
 def iterate_CG(rec):
     """ This runs a single iteration of a CG reconstruction on the special

@@ -283,9 +283,9 @@ def main(argv=sys.argv):
     sys.excepthook = exception_hook
     
     parser = argparse.ArgumentParser(description='Abe\'s Extra Special Live RPI Reconstruction Service')
-    parser.add_argument('--patterns', '-p', type=str, help='ZeroMQ port to broadcast on', default='tcp://localhost:5555')
-    parser.add_argument('--calibrations', '-c', type=str, help='ZeroMQ port to broadcast on', default='tcp://localhost:5557')
-    parser.add_argument('--results', '-r', type=str, help='ZeroMQ port to broadcast on', default='tcp://*:5556')
+    parser.add_argument('--patterns', '-p', type=str, help='ZeroMQ port to listen for patterns on', default='tcp://localhost:37013')
+    parser.add_argument('--calibrations', '-c', type=str, help='ZeroMQ port to broadcast on', default='tcp://localhost:37011')
+    parser.add_argument('--results', '-r', type=str, help='ZeroMQ port to broadcast on', default='tcp://*:37014')
     args = parser.parse_args()
     
     app = QApplication(sys.argv)

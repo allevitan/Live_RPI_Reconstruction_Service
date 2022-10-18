@@ -16,12 +16,28 @@ sub.setsockopt(zmq.SUBSCRIBE, b'')
 
 message = sub.recv_pyobj()
 fig = plt.figure()
-im = plt.imshow(np.abs(message), animated=True)
+if type(message) == dict and 'data' in message:
+    im = plt.imshow(np.abs(message['data']), animated=True)
+else:
+    im = plt.imshow(np.abs(message), animated=True)
 plt.title('Magnitude of reconstruction')
 
 def updatefig(i):
     message = sub.recv_pyobj()
-    im.set_array(np.abs(message))
+    if type(message) == dict:
+        if 'data' in message and type(message['data']) != dict:
+            obj = message['data']
+        else:
+            return im,
+    else:
+        obj = message
+    xs, ys = np.mgrid[:obj.shape[-1],:obj.shape[-2]]
+    xs = xs - np.mean(xs)
+    ys = ys- np.mean(ys)
+    mask = np.sqrt(xs**2+ys**2) < 25
+    to_plot = mask * np.abs(obj)
+    im.set_array(to_plot)
+    im.set_clim([0, np.max(to_plot)])
     return im,
 
 
