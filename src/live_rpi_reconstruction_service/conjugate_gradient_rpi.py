@@ -71,19 +71,26 @@ def forward(obj, probe):
     the fft, so the output patterns have the zero frequency pixel in the
     corner. Honestly, it's surprising how long the fftshift takes.
 
+    If both the probe and object have an extra first dimension, the result
+    will be 4-dimensional, with the first dimension corresponding to the
+    object dimension and the second to the probe dimension.
+    
     Parameters
     ----------
     probe : torch.Tensor
-        An MxL probe function for simulating the exit waves
+        An NxMxL partially coherent probe function for simulating the exit waves
     obj : torch.Tensor
-        An M'xL' or NxM'xL' object function for simulating the exit waves
+        An M'xL' or JxM'xL' object function for simulating the exit waves
 
     Returns
     -------
     wavefield : torch.Tensor
         An MxL or NxMxL tensor of the calculated detector-plane wavefields
     """
-    ew = RPI_interaction(probe, obj)
+    if len(obj.shape)==3 and len(probe.shape)==3:
+        ew = RPI_interaction(probe.unsqueeze(0), obj.unsqueeze(1))
+    else:
+        ew = RPI_interaction(probe, obj)
     diff = t.fft.fft2(ew, norm='ortho')
     return diff
 
@@ -94,18 +101,18 @@ def iterate_CG(rec):
     reconstruction dictionary used by the live RPI reconstruction service
     """
 
-    # TODO: Right now, this only works with the top probe mode
-
+    # TODO: expand probe if it's only 2d so it has modes
     # We start by zeroing the gradients
     rec['obj'].grad = None
     
     # This chunk runs the simulation and gets the gradients
-    diff = forward(rec['obj'], rec['probe'][0])
-    mag_diff = t.abs(diff)
+    diff = forward(rec['obj'], rec['probe'])
+    mag_diff = t.sqrt(t.sum(t.abs(diff)**2, dim=-3))
+    
     error_pattern = mag_diff - rec['sqrtPattern']
     if 'mask' in rec and rec['mask'] is not None:
         error_pattern = error_pattern * rec['mask'].unsqueeze(0)
-
+    
     error = t.sum(error_pattern**2)
     error.backward()
     grad = rec['obj'].grad.detach()
@@ -132,14 +139,16 @@ def iterate_CG(rec):
     rec['last_grad']=grad
     # Now we calculate an optimal step size, assuming that the step
     # remains small compared to the original object.
-    grad_pat = forward(step_dir, rec['probe'][0])
+    grad_pat = forward(step_dir, rec['probe'])
+    
     A = error_pattern.detach()
-    B = t.real(diff.detach().conj()  * grad_pat) / (mag_diff.detach())
+    B = (t.sum(t.real(diff.detach().conj()  * grad_pat),dim=-3)
+         / (mag_diff.detach()))
     if 'mask' in rec and rec['mask'] is not None:
         B = B * rec['mask'].unsqueeze(0)
     
     alpha = -t.sum(A*B, dim=(-1,-2)) / t.sum(B**2, dim=(-1,-2))
-
+    print(t.sum(t.abs(alpha[:,None,None] * step_dir)))
     # Here we actually perform the update
     rec['last_step_dir'] = step_dir
     rec['obj'].data += alpha[:,None,None] * step_dir

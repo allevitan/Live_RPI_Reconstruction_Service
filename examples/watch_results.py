@@ -10,7 +10,7 @@ import matplotlib.animation as animation
 
 context = zmq.Context()
 sub = context.socket(zmq.SUB)
-sub.connect("tcp://localhost:5556")
+sub.connect("tcp://localhost:37014")
 sub.setsockopt(zmq.SUBSCRIBE, b'')
 
 
@@ -34,7 +34,7 @@ def updatefig(i):
     xs, ys = np.mgrid[:obj.shape[-1],:obj.shape[-2]]
     xs = xs - np.mean(xs)
     ys = ys- np.mean(ys)
-    mask = np.sqrt(xs**2+ys**2) < 25
+    mask = np.sqrt(xs**2+ys**2) < 50
     to_plot = mask * np.abs(obj)
     im.set_array(to_plot)
     im.set_clim([0, np.max(to_plot)])
