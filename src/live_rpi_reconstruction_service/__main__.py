@@ -164,6 +164,11 @@ class Window(QMainWindow, Ui_MainWindow):
 
         self.lineEdit_nModes.setText('%d' % self.readoutInfo['nModes'])
 
+        self.label_oversampling.setDisabled(False)
+        self.lineEdit_oversampling.setDisabled(False)
+
+        self.lineEdit_oversampling.setText('%d' % self.readoutInfo['oversampling'])
+
         if self.readoutInfo['hasMask']:
             self.checkBox_mask.setDisabled(False)
         else:
@@ -198,6 +203,8 @@ class Window(QMainWindow, Ui_MainWindow):
         self.lineEdit_pixelSize.setDisabled(True)
         self.label_nModes.setDisabled(True)
         self.lineEdit_nModes.setDisabled(True)
+        self.label_oversampling.setDisabled(True)
+        self.lineEdit_oversampling.setDisabled(True)
         if 'FOV' in self.readoutInfo:
             self.readoutInfo.pop('FOV')
 

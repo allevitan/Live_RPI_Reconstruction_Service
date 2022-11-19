@@ -108,6 +108,7 @@ def iterate_CG(rec):
     # This chunk runs the simulation and gets the gradients
     diff = forward(rec['obj'], rec['probe'])
     mag_diff = t.sqrt(t.sum(t.abs(diff)**2, dim=-3))
+
     if 'oversampling' in rec and rec['oversampling'] != 1:
         mag_diff = t.nn.functional.avg_pool2d(mag_diff.unsqueeze(0),
                                               rec['oversampling'])[0]
@@ -115,7 +116,6 @@ def iterate_CG(rec):
     error_pattern = mag_diff - rec['sqrtPattern']
     if 'mask' in rec and rec['mask'] is not None:
         error_pattern = error_pattern * rec['mask'].unsqueeze(0)
-    
     error = t.sum(error_pattern**2)
     error.backward()
     grad = rec['obj'].grad.detach()
@@ -140,6 +140,7 @@ def iterate_CG(rec):
         step_dir = grad + beta[:,None,None] * rec['last_step_dir']
     
     rec['last_grad']=grad
+
     # Now we calculate an optimal step size, assuming that the step
     # remains small compared to the original object.
     grad_pat = forward(step_dir, rec['probe'])
@@ -156,7 +157,6 @@ def iterate_CG(rec):
         B = B * rec['mask'].unsqueeze(0)
     
     alpha = -t.sum(A*B, dim=(-1,-2)) / t.sum(B**2, dim=(-1,-2))
-    print(t.sum(t.abs(alpha[:,None,None] * step_dir)))
     # Here we actually perform the update
     rec['last_step_dir'] = step_dir
     rec['obj'].data += alpha[:,None,None] * step_dir

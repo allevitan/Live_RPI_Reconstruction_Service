@@ -34,7 +34,7 @@ def updatefig(i):
     xs, ys = np.mgrid[:obj.shape[-1],:obj.shape[-2]]
     xs = xs - np.mean(xs)
     ys = ys- np.mean(ys)
-    mask = np.sqrt(xs**2+ys**2) < 50
+    mask = np.sqrt(xs**2+ys**2) < 70
     to_plot = mask * np.abs(obj)
     im.set_array(to_plot)
     im.set_clim([0, np.max(to_plot)])

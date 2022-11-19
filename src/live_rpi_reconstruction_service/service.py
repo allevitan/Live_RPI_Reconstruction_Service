@@ -47,7 +47,7 @@ def run_RPI_service(stopEvent, clearBufferEvent,
     
     readoutInfo['processingTime'] = 0.0
     # The number of frames to run a trailing average of processing time on
-    nFrames = 5.0
+    nFrames = 4.0
 
     GPUs = controlInfo['GPUs']
 
@@ -89,10 +89,32 @@ def run_RPI_service(stopEvent, clearBufferEvent,
             readoutInfo['FOV'] = calibration['probe'].shape[-1] * basis_norm[-1]
             readoutInfo['basis'] = calibration['basis']
             readoutInfo['nModes'] = calibration['probe'].shape[0]
-
+            if 'oversampling' in calibration:
+                readoutInfo['oversampling'] = calibration['oversampling']
+            else:
+                readoutInfo['oversampling'] = 1
+                
+            #t1 = time.time()
             probes = [t.as_tensor(calibration['probe'],
                                   device=gpu) for gpu in GPUs]
+
+            # This information will be passed along with the reconstructions
+            # to help with the stitching of large area scans
+            # TODO: This is pretty inefficient, and recalculating it constantly
+            # slows things down when lots of changes are being made to the
+            # calibration. There could be some improvement here
             
+            probe_mag = t.sum(t.abs(probes[0])**2, dim=0)
+            # This is ever-so-slightly faster, but I think it's a less good
+            # method.
+            #lr_probe_mag = t.nn.functional.interpolate(
+            #    probe_mag.unsqueeze(0).unsqueeze(0),
+            #    [controlInfo['pixelCount']]*2)
+            lr_probe_mag = t.abs(downsample_to_shape(probe_mag,
+                                        [controlInfo['pixelCount']]*2))
+            lr_probe_mag = (lr_probe_mag / t.mean(lr_probe_mag)).cpu().numpy()
+            #print('TIME DELAY', time.time() - t1)
+                
             if 'mask' in calibration:
                 masks = [t.as_tensor(calibration['mask'],
                                      device=gpu) for gpu in GPUs]
@@ -122,9 +144,11 @@ def run_RPI_service(stopEvent, clearBufferEvent,
         # is in the pudding.
         for i, rec in enumerate(recs):
             if rec is None and len(pattern_buffer) != 0:
+                startTime = time.time()
                 shape = [1]+[controlInfo['pixelCount']]*2
-
+                
                 event = pattern_buffer.pop()
+
                 # If the event that arrived is a dictionary, that means we're
                 # reading from a stream of events with metadata, etc.
                 if type(event) == dict:
@@ -143,20 +167,25 @@ def run_RPI_service(stopEvent, clearBufferEvent,
                     sqrtPattern = t.as_tensor(event, device=GPUs[i])
 
                 event['basis'] = calibration['basis'] \
-                    * (sqrtPattern.shape[-1]/shape[-1])
+                    * readoutInfo['oversampling'] * (sqrtPattern.shape[-1]/shape[-1])
+
+                # if the requested shape changed
+                if lr_probe_mag.shape[0] != shape[1]:
+                    probe_mag = t.sum(t.abs(t.as_tensor(calibration['probe']))**2,
+                                      dim=0)
+                    lr_probe_mag = t.abs(downsample_to_shape(probe_mag,
+                                                             [controlInfo['pixelCount']]*2))
+                    lr_probe_mag = (lr_probe_mag / t.mean(lr_probe_mag)).numpy()
                 
-                lr_probe = downsample_to_shape(t.abs(probes[i].cpu())**2,
-                                               shape[1:])
-                event['weights'] = t.sum(t.abs(lr_probe), dim=0).numpy()
-                event['weights'] /= np.mean(event['weights'])
-                
+                event['weights'] = lr_probe_mag
+
                 if controlInfo['background'] and 'background' in calibration:
                     sqrtPattern =t.clamp(sqrtPattern - backgrounds[i], min=0)
                 sqrtPattern = t.sqrt(sqrtPattern)
                 # FFTshifting the pattern once actually saves a lot of time
                 # compared  to fftshifting the wavefields at each iteration.
                 sqrtPattern = t.fft.ifftshift(sqrtPattern, dim=(-1,-2))
-                
+
                 obj = t.ones(shape, dtype=probes[i].dtype, device=GPUs[i])
                 obj.requires_grad = True
 
@@ -166,26 +195,20 @@ def run_RPI_service(stopEvent, clearBufferEvent,
                 background = (backgrounds[i] if controlInfo['background']
                               else None)
 
-                # TODO: readout the oversampling in the calibration info window
-                if 'oversampling' in calibration:
-                    oversampling = calibration['oversampling']
-                else:
-                    oversampling=1
-                        
                 recs[i]= {'event_id': event_count,
                           'event': event,
                           'probe': probes[i],
-                          'oversampling': oversampling,
+                          'oversampling': readoutInfo['oversampling'],
                           'sqrtPattern': sqrtPattern,
                           'obj': obj,
                           'mask': mask,
-                          'background': background,
+                          #'background': background,
                           'iter': 0,
                           'nIterations': controlInfo['nIterations'],
                           'clearEvery': 10,
-                          'startTime': time.time()}
+                          'startTime': startTime}
                 event_count += 1
-                
+
             elif rec is None:
                 continue
             else:
@@ -196,7 +219,6 @@ def run_RPI_service(stopEvent, clearBufferEvent,
         # are done
         for i, rec in enumerate(recs):
             if rec is not None and rec['iter'] >= rec['nIterations']:
-
                 if type(rec['event']) == dict:
                     event = rec['event']
                     event['data'] = rec['obj'].detach().cpu().numpy()[0]
@@ -205,7 +227,6 @@ def run_RPI_service(stopEvent, clearBufferEvent,
 
                 output_buffer.append((rec['event_id'], event))
                 dt = (time.time() - rec['startTime'])/len(GPUs)
-
                 # Only true on the first frame:
                 if readoutInfo['processingTime'] == 0: 
                     readoutInfo['processingTime'] = dt
