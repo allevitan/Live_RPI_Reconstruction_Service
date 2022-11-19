@@ -155,7 +155,10 @@ def run_RPI_service(stopEvent, clearBufferEvent,
                     # If there's no data, we just pass along the event so
                     # anything listening to our output knows about scan
                     # start/stop events, etc.
-                    if 'data' not in event or type(event['data']) == dict:
+                    if (('data' not in event or type(event['data']) == dict
+                         or event['data'] is None)
+                        or ('event' in event and (event['event']=='start')
+                            or event['event']=='stop')):
                         output_buffer.append((event_count, event))
                         event_count += 1
                         continue
