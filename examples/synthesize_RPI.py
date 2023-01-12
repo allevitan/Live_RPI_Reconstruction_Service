@@ -69,7 +69,8 @@ if __name__ == '__main__':
     sub = context.socket(zmq.SUB)
     sub.connect("tcp://localhost:37014")
     sub.setsockopt(zmq.SUBSCRIBE, b'')
-
+    pub = context.socket(zmq.PUB)
+    pub.bind("tcp://*:37015")
     plt.ion()
 
     started = False
@@ -93,6 +94,7 @@ if __name__ == '__main__':
             new_obj = message['data']
             new_weights = message['weights']
             position = message['position']
+            print(position)
             # TODO: What if the basis changes?
             basis = message['basis']
             obj, weights, offset = add_frame_to_object(obj,
@@ -102,12 +104,15 @@ if __name__ == '__main__':
                                                        new_obj,
                                                        new_weights,
                                                        position)
-            plt.clf()
-            plt.imshow(obj)# * (weights > 0.2))
-            plt.colorbar()
-            plt.title('Magnitude of reconstruction')
-            plt.draw()
-            plt.pause(0.01)
+            event = {'event':'frame',
+                     'data':obj}
+            pub.send_pyobj(event)
+            #plt.clf()
+            #plt.imshow(obj)# * (weights > 0.2))
+            #plt.colorbar()
+            #plt.title('Magnitude of reconstruction')
+            #plt.draw()
+            #plt.pause(0.01)
 
         else:
             print(message['event'])
