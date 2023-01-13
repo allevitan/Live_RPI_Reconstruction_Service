@@ -3,6 +3,13 @@ import cdtools
 from cdtools.tools import interactions
 import numpy as np
 import zmq
+import sys
+
+# This is apparently the best-practice way to load config files from within
+# the package
+import importlib.resources
+import json
+
 
 
 def add_frame_to_object(obj, weights, basis, offset,
@@ -63,27 +70,42 @@ def add_frame_to_object(obj, weights, basis, offset,
     return obj, weights, offset
 
 
-if __name__ == '__main__':
-    from matplotlib import pyplot as plt
+
+def main(argv=sys.argv):
+
+    package_root = importlib.resources.files('live_rpi_reconstruction_service')
+    # This loads the default configuration first. This file is managed by
+    # git and should not be edited by a user
+    config = json.loads(package_root.joinpath('defaults.json').read_text())\
+
+    # And now, if the user has installed an optional config file, we allow it
+    # to override what is in defaults.json
+    config_file_path = package_root.joinpath('config.json')
+
+    # not sure if this works with zipped packages
+    if config_file_path.exists():
+        config.update(json.loads(config_file_path.read_text()))
+
+    
     context = zmq.Context()
     sub = context.socket(zmq.SUB)
-    sub.connect("tcp://localhost:37014")
+    sub.connect(config['rpi_frame_subscription_port'])
     sub.setsockopt(zmq.SUBSCRIBE, b'')
     pub = context.socket(zmq.PUB)
-    pub.bind("tcp://*:37015")
-    plt.ion()
-
+    pub.bind(config['stitched_frame_publish_port'])
+    
+    print('Listening on', config['rpi_frame_subscription_port'])
+    print('Publishing on', config['stitched_frame_publish_port'])
+    
     started = False
     while True:
         message = sub.recv_pyobj()
-        print(message['event'])
         if message['event'] == 'start':
             started = True
             print('Starting new synthesis')
             obj = None
             weights = None
             offset = None
-            fig = plt.figure()
 
         elif message['event'] == 'stop':
             print('Finished synthesis')
@@ -107,15 +129,10 @@ if __name__ == '__main__':
             event = {'event':'frame',
                      'data':obj}
             pub.send_pyobj(event)
-            #plt.clf()
-            #plt.imshow(obj)# * (weights > 0.2))
-            #plt.colorbar()
-            #plt.title('Magnitude of reconstruction')
-            #plt.draw()
-            #plt.pause(0.01)
 
         else:
             print(message['event'])
             print('Rejected an event')
 
-        
+if __name__ == '__main__':
+    sys.exit(main())

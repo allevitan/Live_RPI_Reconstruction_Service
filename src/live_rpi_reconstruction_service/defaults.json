@@ -1,0 +1,9 @@
+{
+    "data_subscription_port" : "tcp://localhost:37013",
+    "calibration_subscription_port" : "tcp://localhost:37011",
+    "rpi_frame_publish_port" : "tcp://*:37014",
+    "rpi_frame_subscription_port" : "tcp://localhost:37014",
+    "stitched_frame_publish_port" : "tcp://*:37015",
+    "stitched_frame_subscription_port" : "tcp://localhost:37015"
+}
+

@@ -16,6 +16,11 @@ from live_rpi_reconstruction_service.live_rpi_reconstruction_service_ui \
     import Ui_MainWindow
 from live_rpi_reconstruction_service.service import run_RPI_service
 
+# This is apparently the best-practice way to load config files from within
+# the package
+import importlib.resources
+import json
+
 """
 Below we define the functionality of the main window
 """
@@ -290,10 +295,33 @@ def main(argv=sys.argv):
     sys.excepthook = exception_hook
     
     parser = argparse.ArgumentParser(description='Abe\'s Extra Special Live RPI Reconstruction Service')
-    parser.add_argument('--patterns', '-p', type=str, help='ZeroMQ port to listen for patterns on', default='tcp://localhost:37013')
-    parser.add_argument('--calibrations', '-c', type=str, help='ZeroMQ port to broadcast on', default='tcp://localhost:37011')
-    parser.add_argument('--results', '-r', type=str, help='ZeroMQ port to broadcast on', default='tcp://*:37014')
+    parser.add_argument('--patterns', '-p', type=str, help='ZeroMQ port to listen for patterns on', default='')
+    parser.add_argument('--calibrations', '-c', type=str, help='ZeroMQ port to broadcast on', default='')
+    parser.add_argument('--results', '-r', type=str, help='ZeroMQ port to broadcast on', default='')
     args = parser.parse_args()
+
+
+    package_root = importlib.resources.files('live_rpi_reconstruction_service')
+    # This loads the default configuration first. This file is managed by
+    # git and should not be edited by a user
+    config = json.loads(package_root.joinpath('defaults.json').read_text())\
+
+    # And now, if the user has installed an optional config file, we allow it
+    # to override what is in defaults.json
+    config_file_path = package_root.joinpath('config.json')
+
+    # not sure if this works with zipped packages
+    if config_file_path.exists():
+        config.update(json.loads(config_file_path.read_text()))
+
+    # Now we set the defaults, if they haven't been set yet
+    if args.patterns == '':
+        args.patterns = config['data_subscription_port']
+    if args.calibrations == '':
+        args.calibrations = config['calibration_subscription_port']
+    if args.results == '':
+        args.results = config['rpi_frame_publish_port']
+        
     
     app = QApplication(sys.argv)
     app.setApplicationName('RPI Reconstruction Service')

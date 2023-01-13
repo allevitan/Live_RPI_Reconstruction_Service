@@ -22,7 +22,10 @@ setuptools.setup(
     ],
     entry_points={
         'console_scripts': [
-            'lrrs=live_rpi_reconstruction_service.__main__:main'
+            'lrrs=live_rpi_reconstruction_service.__main__:main',
+            'stitch_rpi=live_rpi_reconstruction_service.stitch_rpi:main',
+            'watch_live_rpi=live_rpi_reconstruction_service.watch_live_rpi:main',
+            'watch_live_stitched_rpi=live_rpi_reconstruction_service.watch_live_stitched_rpi:main'
         ]
     },
 
